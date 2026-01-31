@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "create":
         return cmd_create(args)
 
-    return 0
+    return 1
 
 
 if __name__ == "__main__":
