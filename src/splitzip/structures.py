@@ -38,7 +38,6 @@ LOCAL_FILE_HEADER_SIG = 0x04034B50
 CENTRAL_DIR_HEADER_SIG = 0x02014B50
 END_OF_CENTRAL_DIR_SIG = 0x06054B50
 DATA_DESCRIPTOR_SIG = 0x08074B50
-SPLIT_ARCHIVE_SIG = 0x08074B50  # Same as data descriptor
 
 
 @dataclass
@@ -377,10 +376,3 @@ class ZipEntry:
             comment=self.comment,
         )
 
-    def _is_utf8(self) -> bool:
-        """Check if filename requires UTF-8 flag."""
-        try:
-            self.arcname.decode("ascii")
-            return False
-        except UnicodeDecodeError:
-            return True
