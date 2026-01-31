@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
 authors = [
-    { name = "twwat", email = "mailto.yourusername@wwwcomdot.com" }
+    { name = "splitzip contributors" }
 ]
 keywords = ["zip", "archive", "split", "multipart", "compression", "7z"]
 classifiers = [

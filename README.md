@@ -1,4 +1,4 @@
-[![PyPI version](https://badge.fury.io/py/splitzip.svg)](https://pypi.org/project/splitzip/) [![Python versions](https://img.shields.io/pypi/pyversions/splitzip)](https://pypi.org/project/splitzip/) [![License: MIT](https://img.shields.io/pypi/l/splitzip)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://img.shields.io/pypi/v/splitzip)](https://pypi.org/project/splitzip/) [![Python versions](https://img.shields.io/pypi/pyversions/splitzip)](https://pypi.org/project/splitzip/) [![License](https://img.shields.io/pypi/l/splitzip)](https://opensource.org/licenses/MIT)
 
 # splitzip
 
@@ -160,12 +160,43 @@ backup.zip  (final volume, contains central directory)
 \* May require all files to be selected and opened together  
 \*\* May require `unzip -F` flag for split archives
 
+## API Reference
+
+### `SplitZipWriter(path, split_size, compression=DEFLATED, compresslevel=6, on_volume=None, on_progress=None)`
+
+- **path** (`str | Path`): Path for the final `.zip` file.
+- **split_size** (`int | str`): Maximum size per volume (bytes or human-readable string).
+- **compression** (`int`): `DEFLATED` (default) or `STORED`.
+- **compresslevel** (`int`): DEFLATE level 1–9 (default 6).
+- **on_volume** (`(int, Path) -> None | None`): Called when a volume is created.
+- **on_progress** (`(str, int, int) -> None | None`): Called with `(filename, bytes_done, total_bytes)`.
+
+#### Methods
+
+- **`write(path, arcname=None, recursive=True, compression=None, compresslevel=None)`** — Add a file or directory. Set `recursive=False` to add only the directory entry without contents. Symlinks are skipped.
+- **`writestr(arcname, data, compression=None, compresslevel=None)`** — Write bytes/str directly.
+- **`write_fileobj(fileobj, arcname, size=None, compression=None, compresslevel=None)`** — Write from a file-like object.
+- **`close()`** — Finalize the archive. Returns list of volume paths.
+
+### Exceptions
+
+| Exception | When raised |
+|-----------|------------|
+| `SplitZipError` | Base exception for all splitzip errors |
+| `VolumeError` | Volume management errors |
+| `VolumeTooSmallError` | Split size too small for headers |
+| `UnsafePathError` | Path traversal detected (zip slip) |
+| `CompressionError` | Compression failure |
+| `IntegrityError` | CRC mismatch |
+
 ## Limitations
 
-- **No ZIP64 support yet**: Individual files must be under 4GB, total entries under 65,535
+- **Minimum volume size**: 64KB
+- **No ZIP64 support**: Individual files must be under 4GB, total entries under 65,535
 - **No encryption**: Use filesystem encryption for sensitive data
 - **No reading/extraction**: This is a write-only library (use standard tools to extract)
 - **No ZSTD/LZMA**: Only DEFLATE and STORED compression (for compatibility)
+- **Symlinks are skipped**: Symbolic links are ignored with a warning
 
 ## Development
 
