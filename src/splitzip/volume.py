@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+import warnings
 from pathlib import Path
 from typing import BinaryIO, Callable
 
@@ -85,7 +87,7 @@ class VolumeManager:
         """Bytes remaining in current volume."""
         if self._is_final_volume:
             # Final volume has no size limit
-            return float("inf")  # type: ignore[return-value]
+            return sys.maxsize
         return self.split_size - self._bytes_written_to_volume
 
     def volume_path_for(self, volume_number: int, is_final: bool = False) -> Path:
@@ -125,6 +127,13 @@ class VolumeManager:
         self._is_final_volume = is_final
         self._volume_paths.append(path)
 
+        if not is_final and volume_number >= 99:
+            warnings.warn(
+                f"Volume count exceeds 99 ({volume_number + 1} volumes). "
+                "Some ZIP tools may not handle 3+ digit extensions.",
+                stacklevel=2,
+            )
+
         if self.on_volume_created:
             self.on_volume_created(volume_number, path)
 
@@ -132,6 +141,18 @@ class VolumeManager:
         """Ensure a volume file is open."""
         if self._current_file is None:
             self._open_volume(0)
+
+    def ensure_space(self, nbytes: int) -> None:
+        """Advance to the next volume if current cannot fit *nbytes*.
+
+        This is used to prevent headers from being split across volumes,
+        which would make patching CRC/size fields impossible.
+        """
+        if self._is_final_volume:
+            return
+        self._ensure_open()
+        if self.space_remaining() < nbytes:
+            self.next_volume()
 
     def next_volume(self) -> None:
         """Close current volume and open the next one."""

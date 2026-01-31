@@ -70,6 +70,12 @@ class SplitZipWriter:
             on_progress: Callback for progress updates.
                 Receives (filename, bytes_done, total_bytes).
         """
+        if compression not in (Compression.STORED, Compression.DEFLATED):
+            raise ValueError(
+                f"Unsupported compression method: {compression}. "
+                "Use Compression.STORED or Compression.DEFLATED."
+            )
+
         self.path = Path(path)
         self.split_size = parse_size(split_size)
         self.compression = compression
@@ -137,6 +143,7 @@ class SplitZipWriter:
     ) -> None:
         """Add a directory to the archive."""
         base_arcname = arcname if arcname else path.name
+        base_arcname = sanitize_arcname(base_arcname)
 
         # Add the directory entry itself
         dir_arcname = base_arcname.rstrip("/") + "/"
@@ -175,11 +182,13 @@ class SplitZipWriter:
             uncompressed_size=0,
             filename=arcname_bytes,
         )
+        header_bytes = header.to_bytes()
 
+        self._volume_mgr.ensure_space(len(header_bytes))
         disk_start = self._volume_mgr.current_volume
         offset = self._volume_mgr.current_offset
 
-        self._volume_mgr.write(header.to_bytes())
+        self._volume_mgr.write(header_bytes)
 
         # Track entry for central directory
         # External attr: directory flag (bit 4) + Unix permissions
@@ -230,11 +239,7 @@ class SplitZipWriter:
         comp = compression if compression is not None else self.compression
         level = compresslevel if compresslevel is not None else self.compresslevel
 
-        # Record where header starts
-        disk_start = self._volume_mgr.current_volume
-        header_offset = self._volume_mgr.current_offset
-
-        # Write header with placeholder values (will patch if streaming)
+        # Write header with placeholder values (will patch after data is written)
         flags = GeneralPurposeFlag.UTF8
         header = LocalFileHeader(
             version_needed=20,
@@ -247,7 +252,13 @@ class SplitZipWriter:
             uncompressed_size=file_size,
             filename=arcname_bytes,
         )
-        self._volume_mgr.write(header.to_bytes())
+        header_bytes = header.to_bytes()
+
+        # Ensure header doesn't split across volumes (patching requires single volume)
+        self._volume_mgr.ensure_space(len(header_bytes))
+        disk_start = self._volume_mgr.current_volume
+        header_offset = self._volume_mgr.current_offset
+        self._volume_mgr.write(header_bytes)
 
         # Compress and write data
         crc, compressed_size, uncompressed_size = self._write_file_data(
@@ -386,38 +397,72 @@ class SplitZipWriter:
         comp = compression if compression is not None else self.compression
         level = compresslevel if compresslevel is not None else self.compresslevel
 
-        # Compute values upfront
         crc = zlib.crc32(data) & 0xFFFFFFFF
         uncompressed_size = len(data)
 
-        if comp == Compression.DEFLATED:
+        if comp == Compression.DEFLATED and len(data) > CHUNK_SIZE:
+            # Stream compress large buffers to avoid doubling memory
+            header = LocalFileHeader(
+                version_needed=20,
+                flags=GeneralPurposeFlag.UTF8,
+                compression=comp,
+                mod_time=mod_time,
+                mod_date=mod_date,
+                crc32=crc,
+                compressed_size=0,  # Will be patched
+                uncompressed_size=uncompressed_size,
+                filename=arcname_bytes,
+            )
+            header_bytes = header.to_bytes()
+
+            self._volume_mgr.ensure_space(len(header_bytes))
+            disk_start = self._volume_mgr.current_volume
+            header_offset = self._volume_mgr.current_offset
+            self._volume_mgr.write(header_bytes)
+
             compressor = zlib.compressobj(level, zlib.DEFLATED, -zlib.MAX_WBITS)
-            compressed = compressor.compress(data) + compressor.flush()
+            compressed_size = 0
+            for i in range(0, len(data), CHUNK_SIZE):
+                chunk = compressor.compress(data[i : i + CHUNK_SIZE])
+                if chunk:
+                    self._volume_mgr.write(chunk)
+                    compressed_size += len(chunk)
+            remaining = compressor.flush()
+            if remaining:
+                self._volume_mgr.write(remaining)
+                compressed_size += len(remaining)
+
+            self._patch_local_header(
+                disk_start, header_offset, crc, compressed_size, uncompressed_size
+            )
         else:
-            compressed = data
+            # Small data or STORED: compress upfront
+            if comp == Compression.DEFLATED:
+                compressor = zlib.compressobj(level, zlib.DEFLATED, -zlib.MAX_WBITS)
+                compressed = compressor.compress(data) + compressor.flush()
+            else:
+                compressed = data
 
-        compressed_size = len(compressed)
+            compressed_size = len(compressed)
 
-        # Record position
-        disk_start = self._volume_mgr.current_volume
-        header_offset = self._volume_mgr.current_offset
+            header = LocalFileHeader(
+                version_needed=20,
+                flags=GeneralPurposeFlag.UTF8,
+                compression=comp,
+                mod_time=mod_time,
+                mod_date=mod_date,
+                crc32=crc,
+                compressed_size=compressed_size,
+                uncompressed_size=uncompressed_size,
+                filename=arcname_bytes,
+            )
+            header_bytes = header.to_bytes()
 
-        # Write header with known values
-        header = LocalFileHeader(
-            version_needed=20,
-            flags=GeneralPurposeFlag.UTF8,
-            compression=comp,
-            mod_time=mod_time,
-            mod_date=mod_date,
-            crc32=crc,
-            compressed_size=compressed_size,
-            uncompressed_size=uncompressed_size,
-            filename=arcname_bytes,
-        )
-        self._volume_mgr.write(header.to_bytes())
-
-        # Write compressed data
-        self._volume_mgr.write(compressed)
+            self._volume_mgr.ensure_space(len(header_bytes))
+            disk_start = self._volume_mgr.current_volume
+            header_offset = self._volume_mgr.current_offset
+            self._volume_mgr.write(header_bytes)
+            self._volume_mgr.write(compressed)
 
         # Track entry
         entry = ZipEntry(
@@ -463,10 +508,6 @@ class SplitZipWriter:
         comp = compression if compression is not None else self.compression
         level = compresslevel if compresslevel is not None else self.compresslevel
 
-        # Record position
-        disk_start = self._volume_mgr.current_volume
-        header_offset = self._volume_mgr.current_offset
-
         # Write header with placeholders
         header = LocalFileHeader(
             version_needed=20,
@@ -479,7 +520,12 @@ class SplitZipWriter:
             uncompressed_size=0,
             filename=arcname_bytes,
         )
-        self._volume_mgr.write(header.to_bytes())
+        header_bytes = header.to_bytes()
+
+        self._volume_mgr.ensure_space(len(header_bytes))
+        disk_start = self._volume_mgr.current_volume
+        header_offset = self._volume_mgr.current_offset
+        self._volume_mgr.write(header_bytes)
 
         # Stream and compress
         crc = 0
@@ -602,4 +648,9 @@ class SplitZipWriter:
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        self.close()
+        if exc_type is not None:
+            # Error path: release file handles without writing central directory
+            self._closed = True
+            self._volume_mgr.close()
+        else:
+            self.close()

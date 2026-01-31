@@ -12,7 +12,7 @@ from unittest import mock
 import pytest
 
 from splitzip import SplitZipWriter, create
-from splitzip.exceptions import SplitZipError
+from splitzip.exceptions import SplitZipError, UnsafePathError
 from splitzip.structures import Compression
 
 
@@ -447,3 +447,68 @@ class TestSymlinkHandling:
 
         with zipfile.ZipFile(archive_path) as zf_std:
             assert len(zf_std.namelist()) == 0
+
+
+class TestDirectorySanitization:
+    """Tests for directory arcname sanitization."""
+
+    def test_directory_traversal_arcname_rejected(self, temp_dir):
+        """Directory arcnames with traversal sequences are rejected."""
+        archive_path = temp_dir / "dirsan.zip"
+        subdir = temp_dir / "mydir"
+        subdir.mkdir()
+        (subdir / "file.txt").write_text("content")
+
+        with SplitZipWriter(archive_path, split_size="1MB") as zf:
+            with pytest.raises(UnsafePathError):
+                zf.write(subdir, arcname="../../evil")
+
+
+class TestCompressionValidation:
+    """Tests for compression parameter validation."""
+
+    def test_invalid_compression_rejected(self, temp_dir):
+        """Invalid compression method raises ValueError."""
+        archive_path = temp_dir / "badcomp.zip"
+        with pytest.raises(ValueError, match="Unsupported compression"):
+            SplitZipWriter(archive_path, split_size="1MB", compression=42)
+
+    def test_stored_compression_accepted(self, temp_dir):
+        """STORED compression is valid."""
+        archive_path = temp_dir / "stored.zip"
+        with SplitZipWriter(
+            archive_path, split_size="1MB", compression=Compression.STORED
+        ) as zf:
+            zf.writestr("test.txt", b"data")
+        assert archive_path.exists()
+
+
+class TestExitOnError:
+    """Tests for __exit__ behavior on error."""
+
+    def test_exit_on_error_does_not_raise(self, temp_dir):
+        """__exit__ releases handles without writing CD on error."""
+        archive_path = temp_dir / "errorexit.zip"
+        try:
+            with SplitZipWriter(archive_path, split_size="1MB") as zf:
+                zf.writestr("test.txt", b"hello")
+                raise RuntimeError("simulated error")
+        except RuntimeError:
+            pass
+
+        # Writer should be marked closed
+        assert zf._closed is True
+
+    def test_exit_on_error_no_valid_archive(self, temp_dir):
+        """Archive written during error path is not a valid ZIP."""
+        archive_path = temp_dir / "errorexit2.zip"
+        try:
+            with SplitZipWriter(archive_path, split_size="1MB") as zf:
+                zf.writestr("test.txt", b"hello")
+                raise RuntimeError("simulated error")
+        except RuntimeError:
+            pass
+
+        # Should not be a valid ZIP (no central directory)
+        with pytest.raises(Exception):
+            zipfile.ZipFile(archive_path)
