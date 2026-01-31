@@ -25,6 +25,8 @@ along with all .zXX files for extraction.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from .exceptions import (
     CompressionError,
     FileNotFoundInArchiveError,
@@ -38,7 +40,7 @@ from .structures import Compression
 from .utils import format_size, parse_size
 from .writer import SplitZipWriter
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     # Main classes
     "SplitZipWriter",
@@ -73,7 +75,7 @@ def create(
     compression: int = DEFLATED,
     compresslevel: int = 6,
     recursive: bool = True,
-) -> list[str]:
+) -> list[Path]:
     """
     Create a split ZIP archive from a list of files/directories.
 
@@ -89,7 +91,7 @@ def create(
         recursive: If True, add directory contents recursively.
 
     Returns:
-        List of paths to all volume files created.
+        List of Path objects to all volume files created.
 
     Example:
         >>> splitzip.create(
@@ -97,7 +99,7 @@ def create(
         ...     ["documents/", "photos/", "important.pdf"],
         ...     split_size="650MB"  # CD-ROM size
         ... )
-        ['backup.z01', 'backup.z02', 'backup.zip']
+        [Path('backup.z01'), Path('backup.z02'), Path('backup.zip')]
     """
     with SplitZipWriter(
         path,
@@ -108,4 +110,4 @@ def create(
         for file_path in files:
             zf.write(file_path, recursive=recursive)
 
-    return [str(p) for p in zf.volume_paths]
+    return zf.volume_paths
