@@ -21,4 +21,4 @@ jobs:
           python-version: "3.12"
       - run: pip install build==1.2.2
       - run: python -m build
-      - uses: pypa/gh-action-pypi-publish@f7600683efdcb7656dec5b29656edb7bc586e597  # v1.12.3
+      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # v1.13.0

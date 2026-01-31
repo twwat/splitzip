@@ -1,4 +1,4 @@
-[![PyPI version](https://img.shields.io/pypi/v/splitzip)](https://pypi.org/project/splitzip/) [![Python versions](https://img.shields.io/pypi/pyversions/splitzip)](https://pypi.org/project/splitzip/) [![License](https://img.shields.io/pypi/l/splitzip)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://img.shields.io/pypi/v/splitzip)](https://pypi.org/project/splitzip/) [![Python versions](https://img.shields.io/pypi/pyversions/splitzip?v=1)](https://pypi.org/project/splitzip/) [![License](https://img.shields.io/pypi/l/splitzip?v=1)](https://opensource.org/licenses/MIT)
 
 # splitzip
 
@@ -105,14 +105,13 @@ splitzip accepts sizes in multiple formats:
 | Bytes | `"100B"` | 100 |
 | Kilobytes (decimal) | `"100KB"` | 100,000 |
 | Megabytes (decimal) | `"100MB"` | 100,000,000 |
-| Gigabytes (decimal) | `"4.7GB"` | 4,700,000,000 |
+| Gigabytes (decimal) | `"1GB"` | 1,000,000,000 |
 | Kibibytes (binary) | `"100KiB"` | 102,400 |
 | Mebibytes (binary) | `"700MiB"` | 734,003,200 |
 | Gibibytes (binary) | `"1GiB"` | 1,073,741,824 |
 
 Common split sizes:
 - CD-ROM: `"650MB"` or `"700MB"`
-- DVD: `"4.7GB"`
 - FAT32 limit: `"4GiB"` (minus 1 byte)
 - Email attachment: `"25MB"`
 
@@ -202,7 +201,7 @@ backup.zip  (final volume, contains central directory)
 
 ```bash
 # Clone and install in development mode
-git clone https://github.com/jimothy/splitzip
+git clone https://github.com/twwat/splitzip
 cd splitzip
 pip install -e ".[dev]"
 
