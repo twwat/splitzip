@@ -7,7 +7,6 @@ from typing import BinaryIO, Callable
 
 from .exceptions import VolumeTooSmallError
 
-
 # Minimum volume size: need room for at least a local file header + some data
 MIN_VOLUME_SIZE = 64 * 1024  # 64 KB minimum
 
@@ -120,7 +119,7 @@ class VolumeManager:
             self._current_file.close()
 
         path = self.volume_path_for(volume_number, is_final)
-        self._current_file = open(path, "wb")
+        self._current_file = Path(path).open("wb")  # noqa: SIM115
         self._current_volume = volume_number
         self._bytes_written_to_volume = 0
         self._is_final_volume = is_final
@@ -175,7 +174,7 @@ class VolumeManager:
                 self._volume_paths[0] = new_path
 
             # Reopen in append mode
-            self._current_file = open(new_path, "ab")
+            self._current_file = new_path.open("ab")  # noqa: SIM115
             self._is_final_volume = True
         else:
             # Need a separate final volume
@@ -234,11 +233,13 @@ class VolumeManager:
             volume: Volume number.
             offset: Byte offset within the volume.
         """
-        path = self.volume_path_for(volume, is_final=(volume == self._current_volume and self._is_final_volume))
-        if path not in self._volume_paths:
-            # Check if it's the current final volume
-            if not (self._is_final_volume and volume == self._current_volume):
-                raise ValueError(f"Volume {volume} has not been created")
+        is_final = volume == self._current_volume and self._is_final_volume
+        path = self.volume_path_for(volume, is_final=is_final)
+        if (
+            path not in self._volume_paths
+            and not (self._is_final_volume and volume == self._current_volume)
+        ):
+            raise ValueError(f"Volume {volume} has not been created")
 
         # Need to flush current file before patching
         if self._current_file:
@@ -261,8 +262,8 @@ class VolumeManager:
         self._closed = True
         return self._volume_paths.copy()
 
-    def __enter__(self) -> "VolumeManager":
+    def __enter__(self) -> VolumeManager:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         self.close()

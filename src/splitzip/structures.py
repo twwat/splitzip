@@ -7,7 +7,7 @@ https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
 from __future__ import annotations
 
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 from typing import ClassVar
 
@@ -79,7 +79,7 @@ class LocalFileHeader:
         return header + self.filename + self.extra
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> "LocalFileHeader":
+    def from_bytes(cls, data: bytes) -> LocalFileHeader:
         """Deserialize from bytes."""
         if len(data) < cls.FIXED_SIZE:
             raise ValueError(f"Data too short for LocalFileHeader: {len(data)} < {cls.FIXED_SIZE}")
@@ -206,7 +206,7 @@ class CentralDirectoryHeader:
         return header + self.filename + self.extra + self.comment
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> "CentralDirectoryHeader":
+    def from_bytes(cls, data: bytes) -> CentralDirectoryHeader:
         """Deserialize from bytes."""
         if len(data) < cls.FIXED_SIZE:
             raise ValueError(
@@ -299,7 +299,7 @@ class EndOfCentralDirectory:
         ) + self.comment
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> "EndOfCentralDirectory":
+    def from_bytes(cls, data: bytes) -> EndOfCentralDirectory:
         """Deserialize from bytes."""
         if len(data) < cls.FIXED_SIZE:
             raise ValueError(

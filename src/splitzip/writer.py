@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import warnings
 import zlib
 from pathlib import Path
-from typing import BinaryIO, Callable, Union
+from typing import BinaryIO, Callable
 
 from .exceptions import SplitZipError
 from .structures import (
     Compression,
-    DataDescriptor,
     EndOfCentralDirectory,
     GeneralPurposeFlag,
     LocalFileHeader,
@@ -19,7 +17,6 @@ from .structures import (
 )
 from .utils import dos_datetime, parse_size, sanitize_arcname
 from .volume import VolumeManager
-
 
 # Default chunk size for reading files
 CHUNK_SIZE = 64 * 1024  # 64 KB
@@ -53,7 +50,7 @@ class SplitZipWriter:
     def __init__(
         self,
         path: str | Path,
-        split_size: Union[int, str],
+        split_size: int | str,
         compression: int = Compression.DEFLATED,
         compresslevel: int = 6,
         on_volume: Callable[[int, Path], None] | None = None,
@@ -70,7 +67,8 @@ class SplitZipWriter:
             compression: Compression method (Compression.STORED or Compression.DEFLATED).
             compresslevel: DEFLATE compression level 1-9 (default 6).
             on_volume: Callback when a volume is created. Receives (volume_number, path).
-            on_progress: Callback for progress updates. Receives (filename, bytes_done, total_bytes).
+            on_progress: Callback for progress updates.
+                Receives (filename, bytes_done, total_bytes).
         """
         self.path = Path(path)
         self.split_size = parse_size(split_size)
@@ -600,8 +598,8 @@ class SplitZipWriter:
         if len(self._entries) >= _MAX_ENTRIES:
             raise SplitZipError(f"Entry count exceeds ZIP32 limit of {_MAX_ENTRIES}")
 
-    def __enter__(self) -> "SplitZipWriter":
+    def __enter__(self) -> SplitZipWriter:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         self.close()
