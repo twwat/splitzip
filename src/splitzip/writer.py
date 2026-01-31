@@ -85,6 +85,7 @@ class SplitZipWriter:
         )
         self._entries: list[ZipEntry] = []
         self._closed = False
+        self._closing = False
 
     @property
     def volume_paths(self) -> list[Path]:
@@ -557,6 +558,9 @@ class SplitZipWriter:
         """
         if self._closed:
             return self._volume_mgr.volume_paths
+        if self._closing:
+            return self._volume_mgr.volume_paths
+        self._closing = True
 
         # Start final volume for central directory
         self._volume_mgr.start_final_volume()
