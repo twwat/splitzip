@@ -7,7 +7,7 @@ import zlib
 from pathlib import Path
 from typing import BinaryIO, Callable, Union
 
-from .exceptions import CompressionError
+from .exceptions import SplitZipError
 from .structures import (
     Compression,
     DataDescriptor,
@@ -22,6 +22,10 @@ from .volume import VolumeManager
 
 # Default chunk size for reading files
 CHUNK_SIZE = 64 * 1024  # 64 KB
+
+# ZIP32 limits
+_MAX_32 = 0xFFFFFFFF  # 4,294,967,295 bytes
+_MAX_ENTRIES = 0xFFFF  # 65,535 entries
 
 
 class SplitZipWriter:
@@ -147,6 +151,7 @@ class SplitZipWriter:
 
     def _write_directory_entry(self, arcname: str, path: Path) -> None:
         """Write a directory entry (no data, just metadata)."""
+        self._check_entry_limit()
         arcname_bytes = arcname.encode("utf-8")
         stat = path.stat()
         mod_time, mod_date = dos_datetime(stat.st_mtime)
@@ -195,6 +200,8 @@ class SplitZipWriter:
         compresslevel: int | None,
     ) -> None:
         """Write a single file to the archive."""
+        self._check_entry_limit()
+
         arcname = arcname if arcname else path.name
         arcname = sanitize_arcname(arcname)
         arcname_bytes = arcname.encode("utf-8")
@@ -202,6 +209,12 @@ class SplitZipWriter:
         stat = path.stat()
         mod_time, mod_date = dos_datetime(stat.st_mtime)
         file_size = stat.st_size
+
+        if file_size > _MAX_32:
+            raise SplitZipError(
+                f"File '{path}' is {file_size} bytes; exceeds 4GB ZIP32 limit. "
+                "ZIP64 not supported."
+            )
 
         comp = compression if compression is not None else self.compression
         level = compresslevel if compresslevel is not None else self.compresslevel
@@ -304,6 +317,12 @@ class SplitZipWriter:
                     self._volume_mgr.write(remaining)
                     compressed_size += len(remaining)
 
+        if compressed_size > _MAX_32 or uncompressed_size > _MAX_32:
+            raise SplitZipError(
+                f"File data exceeds 4GB ZIP32 limit (compressed={compressed_size}, "
+                f"uncompressed={uncompressed_size}). ZIP64 not supported."
+            )
+
         return crc & 0xFFFFFFFF, compressed_size, uncompressed_size
 
     def _patch_local_header(
@@ -339,9 +358,15 @@ class SplitZipWriter:
             compresslevel: Override compression level.
         """
         self._check_closed()
+        self._check_entry_limit()
 
         if isinstance(data, str):
             data = data.encode("utf-8")
+
+        if len(data) > _MAX_32:
+            raise SplitZipError(
+                f"Data size {len(data)} bytes exceeds 4GB ZIP32 limit. ZIP64 not supported."
+            )
 
         arcname = sanitize_arcname(arcname)
         arcname_bytes = arcname.encode("utf-8")
@@ -418,6 +443,7 @@ class SplitZipWriter:
             compresslevel: Override compression level.
         """
         self._check_closed()
+        self._check_entry_limit()
 
         arcname = sanitize_arcname(arcname)
         arcname_bytes = arcname.encode("utf-8")
@@ -483,6 +509,12 @@ class SplitZipWriter:
 
         crc = crc & 0xFFFFFFFF
 
+        if compressed_size > _MAX_32 or uncompressed_size > _MAX_32:
+            raise SplitZipError(
+                f"Streamed data exceeds 4GB ZIP32 limit (compressed={compressed_size}, "
+                f"uncompressed={uncompressed_size}). ZIP64 not supported."
+            )
+
         # Patch header
         self._patch_local_header(disk_start, header_offset, crc, compressed_size, uncompressed_size)
 
@@ -546,6 +578,11 @@ class SplitZipWriter:
         """Raise if writer is closed."""
         if self._closed:
             raise RuntimeError("SplitZipWriter is closed")
+
+    def _check_entry_limit(self) -> None:
+        """Raise if entry count exceeds ZIP32 limit."""
+        if len(self._entries) >= _MAX_ENTRIES:
+            raise SplitZipError(f"Entry count exceeds ZIP32 limit of {_MAX_ENTRIES}")
 
     def __enter__(self) -> "SplitZipWriter":
         return self
