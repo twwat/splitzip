@@ -2,6 +2,7 @@
 
 import pytest
 
+from splitzip.exceptions import UnsafePathError
 from splitzip.utils import dos_datetime, format_size, parse_size, sanitize_arcname
 
 
@@ -116,3 +117,26 @@ class TestSanitizeArcname:
 
     def test_double_slashes_normalized(self):
         assert sanitize_arcname("dir//sub//file.txt") == "dir/sub/file.txt"
+
+    def test_dotdot_collapsed(self):
+        assert sanitize_arcname("foo/../bar") == "bar"
+
+    def test_traversal_raises(self):
+        with pytest.raises(UnsafePathError):
+            sanitize_arcname("../../etc/passwd")
+        with pytest.raises(UnsafePathError):
+            sanitize_arcname("foo/../../bar")
+
+    def test_arcname_length_limit(self):
+        with pytest.raises(ValueError, match="Archive name too long"):
+            sanitize_arcname("a" * 70000)
+
+    def test_dot_returns_empty(self):
+        assert sanitize_arcname(".") == ""
+
+    def test_empty_string_returns_empty(self):
+        assert sanitize_arcname("") == ""
+
+    def test_null_byte_raises(self):
+        with pytest.raises(UnsafePathError):
+            sanitize_arcname("foo\x00bar")

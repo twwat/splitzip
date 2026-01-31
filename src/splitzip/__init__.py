@@ -6,10 +6,10 @@ WinZip, 7-Zip, and other standard tools without requiring special software.
 
 Example:
     >>> import splitzip
-    >>> 
+    >>>
     >>> # Simple one-liner
     >>> splitzip.create("backup.zip", ["file1.txt", "data/"], split_size="100MB")
-    >>> 
+    >>>
     >>> # Context manager for more control
     >>> with splitzip.SplitZipWriter("backup.zip", split_size="100MB") as zf:
     ...     zf.write("file1.txt")
@@ -23,13 +23,16 @@ The final .zip file contains the central directory and must be present
 along with all .zXX files for extraction.
 """
 
+from __future__ import annotations
+
 from .exceptions import (
     CompressionError,
     FileNotFoundInArchiveError,
     IntegrityError,
     SplitZipError,
-    VolumeTooSmallError,
+    UnsafePathError,
     VolumeError,
+    VolumeTooSmallError,
 )
 from .structures import Compression
 from .utils import format_size, parse_size
@@ -55,6 +58,7 @@ __all__ = [
     "CompressionError",
     "IntegrityError",
     "FileNotFoundInArchiveError",
+    "UnsafePathError",
 ]
 
 # Convenience aliases

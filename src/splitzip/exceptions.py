@@ -43,3 +43,11 @@ class FileNotFoundInArchiveError(SplitZipError):
     def __init__(self, filename: str) -> None:
         self.filename = filename
         super().__init__(f"File not found in archive: '{filename}'")
+
+
+class UnsafePathError(SplitZipError):
+    """Path would escape the archive root (zip slip)."""
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        super().__init__(f"Unsafe archive path (traversal detected): '{path}'")

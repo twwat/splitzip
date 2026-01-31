@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import posixpath
 import re
 import time
-from typing import Union
+
+from .exceptions import UnsafePathError
 
 # Size parsing patterns
 _SIZE_PATTERN = re.compile(
@@ -30,7 +32,7 @@ _SIZE_MULTIPLIERS: dict[str, int] = {
 }
 
 
-def parse_size(size: Union[int, str]) -> int:
+def parse_size(size: int | str) -> int:
     """
     Parse a size specification into bytes.
 
@@ -166,6 +168,10 @@ def sanitize_arcname(path: str) -> str:
     Returns:
         Sanitized archive name.
     """
+    # Reject null bytes
+    if "\x00" in path:
+        raise UnsafePathError(path)
+
     # Convert backslashes to forward slashes
     name = path.replace("\\", "/")
 
@@ -179,5 +185,25 @@ def sanitize_arcname(path: str) -> str:
     # Normalize multiple slashes
     while "//" in name:
         name = name.replace("//", "/")
+
+    # Collapse .. segments
+    name = posixpath.normpath(name)
+
+    # Strip leading /
+    name = name.lstrip("/")
+
+    # Reject if it escapes root
+    if name == ".." or name.startswith("../"):
+        raise UnsafePathError(path)
+
+    # normpath of empty string is "."
+    if name == ".":
+        name = ""
+
+    # Validate archive name length (ZIP format limit)
+    if len(name.encode("utf-8")) > 65535:
+        raise ValueError(
+            f"Archive name too long ({len(name.encode('utf-8'))} bytes, max 65535)"
+        )
 
     return name
