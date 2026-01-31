@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 import zlib
 from pathlib import Path
 from typing import BinaryIO, Callable, Union
@@ -118,6 +119,10 @@ class SplitZipWriter:
         if not path.exists():
             raise FileNotFoundError(f"No such file or directory: '{path}'")
 
+        if path.is_symlink():
+            warnings.warn(f"Skipping symlink: '{path}'", stacklevel=2)
+            return
+
         if path.is_dir():
             self._write_directory(path, arcname, recursive, compression, compresslevel)
         else:
@@ -143,6 +148,9 @@ class SplitZipWriter:
 
         # Add contents
         for item in sorted(path.iterdir()):
+            if item.is_symlink():
+                warnings.warn(f"Skipping symlink: '{item}'", stacklevel=2)
+                continue
             item_arcname = f"{base_arcname.rstrip('/')}/{item.name}"
             if item.is_dir():
                 self._write_directory(item, item_arcname, True, compression, compresslevel)
@@ -200,6 +208,10 @@ class SplitZipWriter:
         compresslevel: int | None,
     ) -> None:
         """Write a single file to the archive."""
+        if path.is_symlink():
+            warnings.warn(f"Skipping symlink: '{path}'", stacklevel=2)
+            return
+
         self._check_entry_limit()
 
         arcname = arcname if arcname else path.name

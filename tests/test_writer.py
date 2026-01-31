@@ -4,6 +4,7 @@ import io
 import os
 import subprocess
 import tempfile
+import warnings
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -387,3 +388,62 @@ class TestOverflowGuards:
             zf.writestr("one_more.txt", b"data")
         # Clean up without trying to close normally (entries are fake)
         zf._closed = True
+
+
+class TestSymlinkHandling:
+    """Tests for symlink skipping."""
+
+    def test_symlink_file_skipped(self, temp_dir):
+        """Symlink files are skipped with a warning."""
+        archive_path = temp_dir / "symlink.zip"
+        real_file = temp_dir / "real.txt"
+        real_file.write_text("real content")
+        link = temp_dir / "link.txt"
+        link.symlink_to(real_file)
+
+        with SplitZipWriter(archive_path, split_size="1MB") as zf:
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                zf.write(link)
+                assert len(w) == 1
+                assert "symlink" in str(w[0].message).lower()
+
+        with zipfile.ZipFile(archive_path) as zf_std:
+            assert len(zf_std.namelist()) == 0
+
+    def test_symlink_in_directory_skipped(self, temp_dir):
+        """Symlinks inside directories are skipped."""
+        archive_path = temp_dir / "dirlink.zip"
+        subdir = temp_dir / "mydir"
+        subdir.mkdir()
+        (subdir / "real.txt").write_text("real")
+        (subdir / "link.txt").symlink_to(subdir / "real.txt")
+
+        with SplitZipWriter(archive_path, split_size="1MB") as zf:
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                zf.write(subdir)
+
+        with zipfile.ZipFile(archive_path) as zf_std:
+            names = zf_std.namelist()
+            assert "mydir/real.txt" in names
+            assert "mydir/link.txt" not in names
+
+    def test_symlink_to_directory_skipped(self, temp_dir):
+        """A symlink pointing to a directory is skipped at the top level."""
+        archive_path = temp_dir / "symdirlink.zip"
+        real_dir = temp_dir / "realdir"
+        real_dir.mkdir()
+        (real_dir / "file.txt").write_text("content")
+        link_dir = temp_dir / "linkdir"
+        link_dir.symlink_to(real_dir)
+
+        with SplitZipWriter(archive_path, split_size="1MB") as zf:
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                zf.write(link_dir)
+                assert len(w) == 1
+                assert "symlink" in str(w[0].message).lower()
+
+        with zipfile.ZipFile(archive_path) as zf_std:
+            assert len(zf_std.namelist()) == 0
