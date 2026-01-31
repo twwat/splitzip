@@ -32,7 +32,7 @@ _SIZE_MULTIPLIERS: dict[str, int] = {
 }
 
 
-def parse_size(size: int | str) -> int:
+def parse_size(size: int | float | str) -> int:
     """
     Parse a size specification into bytes.
 
