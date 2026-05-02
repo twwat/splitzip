@@ -606,21 +606,24 @@ class SplitZipWriter:
             return self._volume_mgr.volume_paths
         self._closing = True
 
-        # Start final volume for central directory
-        self._volume_mgr.start_final_volume()
+        # Pre-serialize the central directory so we know its exact size before
+        # asking VolumeManager to start the final volume. With the size in
+        # hand, VolumeManager can fold the central directory into the last
+        # data volume when there is room — avoiding an orphan .zip that
+        # would otherwise hold only metadata.
+        cd_chunks = [entry.to_central_directory_header().to_bytes() for entry in self._entries]
+        cd_size = sum(len(chunk) for chunk in cd_chunks)
+        # EOCD has no comment, so its serialized size equals FIXED_SIZE.
+        reserved = cd_size + EndOfCentralDirectory.FIXED_SIZE
 
-        # Write central directory
+        self._volume_mgr.start_final_volume(reserved_bytes=reserved)
+
         cd_start_disk = self._volume_mgr.current_volume
         cd_start_offset = self._volume_mgr.current_offset
-        cd_size = 0
 
-        for entry in self._entries:
-            cd_header = entry.to_central_directory_header()
-            cd_bytes = cd_header.to_bytes()
-            self._volume_mgr.write(cd_bytes)
-            cd_size += len(cd_bytes)
+        for chunk in cd_chunks:
+            self._volume_mgr.write(chunk)
 
-        # Write end of central directory
         eocd = EndOfCentralDirectory(
             disk_number=self._volume_mgr.current_volume,
             disk_with_cd_start=cd_start_disk,

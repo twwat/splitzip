@@ -162,15 +162,29 @@ class VolumeManager:
         next_num = self._current_volume + 1 if self._current_file else 0
         self._open_volume(next_num)
 
-    def start_final_volume(self) -> None:
+    def start_final_volume(self, reserved_bytes: int = 0) -> None:
         """
         Start the final volume (.zip file).
 
-        The final volume contains the central directory and has no size limit.
-        Call this before writing the central directory.
+        The final volume contains the central directory and end-of-central-
+        directory record. Call this before writing the central directory.
 
-        If all content fits in a single volume, this renames that volume to .zip.
-        Otherwise, it opens a new volume for the central directory.
+        Behavior:
+        - If nothing has been written yet, the final volume is opened directly.
+        - If exactly one data volume exists, it is renamed in place to .zip.
+        - If two or more data volumes exist and ``reserved_bytes`` fits in the
+          remaining space of the last data volume, that volume is renamed to
+          .zip and reused — avoiding an orphan .zip volume that holds only the
+          central directory.
+        - Otherwise a separate final .zip volume is opened.
+
+        Args:
+            reserved_bytes: Estimated bytes the caller will write after this
+                call (central directory headers + end-of-central-directory
+                record). Used to decide whether the last data volume has room
+                to absorb the central directory in place. Pass 0 to keep the
+                conservative behavior of always opening a new final volume
+                when multiple data volumes exist.
         """
         if self._is_final_volume:
             return
@@ -180,26 +194,44 @@ class VolumeManager:
             self._open_volume(0, is_final=True)
             return
 
-        # If we only have one volume so far and it's not full, we can rename it
-        # to be the final .zip file instead of creating .z01 + .zip
+        # Single-volume case: rename .z01 to .zip in place.
         if len(self._volume_paths) == 1 and self._bytes_written_to_volume < self.split_size:
-            # Close current file
-            self._current_file.close()
+            self._fold_current_volume_to_final()
+            return
 
-            # Rename from .z01 to .zip
-            old_path = self._volume_paths[0]
-            new_path = self.base_path
+        # Multi-volume case: fold the last data volume into .zip when the
+        # central directory fits in its remaining space. This avoids a tiny
+        # orphan .zip volume containing only metadata when an earlier volume
+        # split landed close to the boundary.
+        if (
+            reserved_bytes > 0
+            and len(self._volume_paths) >= 2
+            and self.space_remaining() >= reserved_bytes
+        ):
+            self._fold_current_volume_to_final()
+            return
 
-            if old_path != new_path:
-                old_path.rename(new_path)
-                self._volume_paths[0] = new_path
+        # Need a separate final volume
+        self._open_volume(self._current_volume + 1, is_final=True)
 
-            # Reopen in append mode
-            self._current_file = new_path.open("ab")  # noqa: SIM115
-            self._is_final_volume = True
-        else:
-            # Need a separate final volume
-            self._open_volume(self._current_volume + 1, is_final=True)
+    def _fold_current_volume_to_final(self) -> None:
+        """Rename the current data volume to .zip and reopen it in append mode.
+
+        The volume number is preserved so central-directory disk references
+        written by the caller remain correct after the rename.
+        """
+        assert self._current_file is not None
+        self._current_file.close()
+
+        old_path = self._volume_paths[-1]
+        new_path = self.base_path
+
+        if old_path != new_path:
+            old_path.rename(new_path)
+            self._volume_paths[-1] = new_path
+
+        self._current_file = new_path.open("ab")  # noqa: SIM115
+        self._is_final_volume = True
 
     def write(self, data: bytes) -> None:
         """

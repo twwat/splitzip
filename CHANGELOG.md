@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0]
+
+### Fixed
+- Central directory now folds into the last data volume when there is room,
+  instead of unconditionally creating a separate `.zip` volume holding only
+  metadata. A 1368 MiB file split at 1024 MiB used to produce three files
+  (`.z01`, `.z02`, `.zip`) where `.zip` was ~80 bytes; it now produces two
+  (`.z01`, `.zip`).
+
+### Changed
+- `VolumeManager.start_final_volume()` accepts an optional `reserved_bytes`
+  hint. The writer pre-serializes the central directory and passes its
+  exact size + EOCD size so the volume manager can decide whether to fold.
+  Default of 0 preserves the previous behavior.
+
 ## [0.2.0]
 
 ### Security

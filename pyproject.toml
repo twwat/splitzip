@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "splitzip"
-version = "0.2.0"
+version = "0.3.0"
 description = "Create split ZIP archives compatible with standard tools"
 readme = "README.md"
 license = "MIT"
