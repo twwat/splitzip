@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1]
+
+### Fixed
+- `__version__` and `splitzip --version` reported `0.2.0` in the 0.3.0
+  release. The version is now defined only in `src/splitzip/__init__.py`
+  and the build reads it from there, so the two can no longer drift apart.
+
 ## [0.3.0]
 
 ### Fixed

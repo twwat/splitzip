@@ -40,7 +40,7 @@ from .structures import Compression
 from .utils import format_size, parse_size
 from .writer import SplitZipWriter
 
-__version__ = "0.2.0"
+__version__ = "0.3.1"
 __all__ = [
     # Main classes
     "SplitZipWriter",

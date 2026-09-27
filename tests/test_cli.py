@@ -1,7 +1,10 @@
 """Tests for the CLI interface."""
 
+from importlib.metadata import version
+
 import pytest
 
+from splitzip import __version__
 from splitzip.__main__ import main
 
 
@@ -18,6 +21,10 @@ class TestCLI:
         with pytest.raises(SystemExit) as exc_info:
             main(["--version"])
         assert exc_info.value.code == 0
+        assert __version__ in capsys.readouterr().out
+
+    def test_version_matches_package_metadata(self):
+        assert version("splitzip") == __version__
 
     def test_create_nonexistent_file(self, tmp_path, capsys):
         result = main([

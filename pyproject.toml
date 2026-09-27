@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "splitzip"
-version = "0.3.0"
+dynamic = ["version"]
 description = "Create split ZIP archives compatible with standard tools"
 readme = "README.md"
 license = "MIT"
@@ -42,6 +42,9 @@ dev = [
 
 [project.scripts]
 splitzip = "splitzip.__main__:main"
+
+[tool.hatch.version]
+path = "src/splitzip/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/splitzip"]
